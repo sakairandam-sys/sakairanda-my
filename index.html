@@ -82,7 +82,6 @@
       font-size: 17px;
       font-weight: bold;
       cursor: pointer;
-      transition: opacity 0.2s;
     }
 
     button:hover {
@@ -115,7 +114,9 @@
       読み込み中…
     </div>
 
-    <p id="message">Wikipediaから出演作品を取得しています。</p>
+    <p id="message">
+      Wikipediaから出演作品を取得しています。
+    </p>
 
     <button id="drawButton" disabled>
       ガチャを回す
@@ -145,7 +146,7 @@
       "DVD"
     ];
 
-    // 抽選から除外する作品・項目
+    // 抽選から除外する項目
     const excludedTitles = [
       "劇団☆新感線",
       "双数姉妹",
@@ -193,10 +194,6 @@
       return title
         .replace(/_/g, " ")
         .replace(/\s+/g, " ")
-        .replace(/\s*（/g, "（")
-        .replace(/\s*）/g, "）")
-        .replace(/\s*\(/g, " (")
-        .replace(/\s*\)/g, ")")
         .trim();
     }
 
@@ -229,8 +226,31 @@
       let cleanLine = line.replace(
         /\[\[([^\]]+)\]\]/g,
         (match) => {
+
+          const inside = match.slice(2, -2);
+          const parts = inside.split("|");
+
+          const target = parts[0].trim();
+
+          const displayTitle = (
+            parts.length > 1
+              ? parts[parts.length - 1]
+              : target
+          ).trim();
+
+          const title = normalizeTitle(
+            target.split("#")[0]
+          );
+
           const index = links.length;
-          links.push(match);
+
+          links.push({
+            target,
+            title,
+            displayTitle,
+            token: `WIKILINKTOKEN${index}END`
+          });
+
           return `WIKILINKTOKEN${index}END`;
         }
       );
@@ -241,16 +261,10 @@
         /WIKILINKTOKEN(\d+)END\s*（([^）]*)）/g,
         (match, index, content) => {
 
-          const rawTitle = links[Number(index)]
-            .slice(2, -2)
-            .split("|")[0]
-            .split("#")[0]
-            .trim();
-
-          const title = normalizeTitle(rawTitle);
+          const link = links[Number(index)];
 
           // 例外作品は除外しない
-          if (isException(title)) {
+          if (isException(link.title)) {
             return match;
           }
 
@@ -262,72 +276,17 @@
         }
       );
 
-      // Wikiリンクを復元
-      cleanLine = cleanLine.replace(
-        /WIKILINKTOKEN(\d+)END/g,
-        (match, index) => links[Number(index)]
-      );
-
-      // 例外作品のリンクを再度保護
-      const protectedLinks = [];
-
-      cleanLine = cleanLine.replace(
-        /\[\[([^\]]+)\]\]/g,
-        (match) => {
-
-          const rawTitle = match
-            .slice(2, -2)
-            .split("|")[0]
-            .split("#")[0]
-            .trim();
-
-          if (isException(rawTitle)) {
-            const index = protectedLinks.length;
-            protectedLinks.push(match);
-            return `EXCEPTIONTOKEN${index}END`;
-          }
-
-          return match;
-        }
-      );
-
       // 括弧内の文字を削除
+      // Wikiリンクは一時的な文字列にしているため、
+      // リンクそのものは元の形で復元できる
       cleanLine = cleanLine
         .replace(/（[^）]*）/g, "")
         .replace(/\([^)]*\)/g, "");
 
-      // 例外作品のリンクを復元
-      cleanLine = cleanLine.replace(
-        /EXCEPTIONTOKEN(\d+)END/g,
-        (match, index) => protectedLinks[Number(index)]
+      // 例外作品も含め、残ったリンクだけを取得
+      return links.filter(link =>
+        cleanLine.includes(link.token)
       );
-
-      // Wikiリンクを抽出
-      const matches = [
-        ...cleanLine.matchAll(/\[\[([^\]]+)\]\]/g)
-      ];
-
-      return matches.map(match => {
-
-        const raw = match[1];
-
-        const parts = raw.split("|");
-
-        const title = normalizeTitle(
-          parts[0].split("#")[0].trim()
-        );
-
-        const displayTitle = (
-          parts.length > 1
-            ? parts[parts.length - 1]
-            : title
-        ).trim();
-
-        return {
-          title,
-          displayTitle
-        };
-      });
     }
 
 
@@ -349,23 +308,26 @@
       const response = await fetch(apiUrl);
 
       if (!response.ok) {
-        throw new Error("Wikipedia APIへの接続に失敗しました。");
+        throw new Error(
+          "Wikipedia APIへの接続に失敗しました。"
+        );
       }
 
       const data = await response.json();
 
       if (!data.parse || !data.parse.wikitext) {
-        throw new Error("出演作品の情報を取得できませんでした。");
+        throw new Error(
+          "出演作品の情報を取得できませんでした。"
+        );
       }
 
       const wikitext = data.parse.wikitext;
-
-      // 「出演」見出しの範囲を取得
       const lines = wikitext.split("\n");
 
       let inside出演 = false;
-      let works = [];
       let currentGenre = "";
+
+      const works = [];
 
       for (const line of lines) {
 
@@ -403,7 +365,6 @@
           continue;
         }
 
-        // 対象ジャンルの行からリンクを取得
         const links = extractLinksFromLine(line);
 
         if (links.length === 0) {
@@ -427,16 +388,16 @@
           // Wikipediaの特殊ページなどを除外
           if (
             title.includes(":") ||
-            title.startsWith("#") ||
-            title.startsWith("ファイル") ||
-            title.startsWith("Category:")
+            title.startsWith("#")
           ) {
             continue;
           }
 
+          // 特別URLがあれば優先
+          // それ以外はWikipediaに記載された元のリンク先を使用
           const url = specialUrls[title] ||
             "https://ja.wikipedia.org/wiki/" +
-            encodeURIComponent(title.replace(/ /g, "_"));
+            encodeURI(link.target.replace(/ /g, "_"));
 
           works.push({
             title: link.displayTitle || title,
@@ -485,43 +446,19 @@
       isDrawing = true;
       drawButton.disabled = true;
 
-      resultElement.textContent = "抽選中…";
-      messageElement.textContent = "";
+      // 演出なしで即座に抽選
+      const selected =
+        works[Math.floor(Math.random() * works.length)];
 
-      // 抽選演出
-      let count = 0;
+      resultElement.textContent = selected.title;
 
-      const animation = setInterval(() => {
+      messageElement.textContent =
+        selected.genre + "から選ばれました。";
 
-        const randomWork =
-          works[Math.floor(Math.random() * works.length)];
-
-        resultElement.textContent = randomWork.title;
-
-        count++;
-
-        if (count >= 12) {
-
-          clearInterval(animation);
-
-          const selected =
-            works[Math.floor(Math.random() * works.length)];
-
-          resultElement.textContent = selected.title;
-
-          messageElement.textContent =
-            selected.genre + "から選ばれました。";
-
-          isDrawing = false;
-          drawButton.disabled = false;
-
-          // 1秒後にWikipediaへ移動
-          setTimeout(() => {
-            window.location.href = selected.url;
-          }, 1000);
-        }
-
-      }, 100);
+      // 1秒後にWikipediaへ移動
+      setTimeout(() => {
+        window.location.href = selected.url;
+      }, 1000);
     }
 
 
