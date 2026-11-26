@@ -34,6 +34,40 @@ p {
   const status = document.getElementById("status");
   const api = "https://ja.wikipedia.org/w/api.php";
 
+  // 抽選対象ジャンル
+  const targets = [
+    "映画",
+    "テレビドラマ",
+    "舞台",
+    "テレビアニメ",
+    "OVA",
+    "劇場アニメ",
+    "吹き替え",
+    "DVD"
+  ];
+
+  // 抽選対象外
+  const excludedTitles = [
+    "劇団☆新感線",
+    "双数姉妹",
+    "サードステージ"
+  ];
+
+  // 括弧による除外処理の例外
+  const exceptions = [
+    "世にも奇妙な物語 春の特別編 (2008年)",
+    "パンドラ〜永遠の命〜"
+  ];
+
+  // 特定作品の移動先
+  const specialUrls = {
+    "エンジン":
+      "https://ja.wikipedia.org/wiki/エンジン_(テレビドラマ)",
+
+    "女医":
+      "https://ja.wikipedia.org/wiki/女医_(テレビドラマ)"
+  };
+
   try {
     status.textContent = "出演作品を調査中...";
 
@@ -60,18 +94,6 @@ p {
 
     const wikitext = data.parse.wikitext;
 
-    // 抽選対象ジャンル
-    const targets = [
-      "映画",
-      "テレビドラマ",
-      "舞台",
-      "テレビアニメ",
-      "OVA",
-      "劇場アニメ",
-      "吹き替え",
-      "DVD"
-    ];
-
     const candidates = [];
     const lines = wikitext.split("\n");
 
@@ -88,6 +110,7 @@ p {
 
       if (heading) {
         const level = heading[1].length;
+
         const name = heading[2]
           .replace(/\[\[|\]\]/g, "")
           .trim();
@@ -125,14 +148,41 @@ p {
         continue;
       }
 
-      // 括弧内の最初の文字が数字以外なら
-      // 直前のWikiリンクも除外する
+      // Wikiリンクを一時的に保護
+      const links = [];
+
       let cleanLine = line.replace(
-        /\[\[([^\]]+)\]\]\s*（([^）]*)）/g,
-        (match, link, content) => {
+        /\[\[([^\]]+)\]\]/g,
+        (match) => {
+          const index = links.length;
+          links.push(match);
+          return `WIKILINKTOKEN${index}END`;
+        }
+      );
+
+      // 括弧内の最初の文字が数字以外なら
+      // 直前のWikiリンクを除外
+      cleanLine = cleanLine.replace(
+        /WIKILINKTOKEN(\d+)END\s*（([^）]*)）/g,
+        (match, index, content) => {
+
+          const rawTitle = links[Number(index)]
+            .slice(2, -2)
+            .split("|")[0]
+            .split("#")[0]
+            .trim()
+            .replace(/_/g, " ");
+
+          // 例外作品は除外しない
+          if (exceptions.includes(rawTitle)) {
+            return match;
+          }
+
+          // 最初の文字が数字以外なら除外
           if (!/^[0-9０-９]/.test(content.trim())) {
             return "";
           }
+
           return match;
         }
       );
@@ -142,6 +192,12 @@ p {
         .replace(/（[^）]*）/g, "")
         .replace(/\([^)]*\)/g, "");
 
+      // Wikiリンクを復元
+      cleanLine = cleanLine.replace(
+        /WIKILINKTOKEN(\d+)END/g,
+        (match, index) => links[Number(index)]
+      );
+
       // Wikiリンクを取得
       const matches = [
         ...cleanLine.matchAll(/\[\[([^\]]+)\]\]/g)
@@ -149,8 +205,9 @@ p {
 
       if (!matches.length) continue;
 
-      // 表の1行・リスト1行につき最初のリンクを採用
+      // 1行につき最初の有効なリンクを採用
       for (const match of matches) {
+
         const rawTitle = match[1]
           .split("|")[0]
           .split("#")[0]
@@ -164,16 +221,25 @@ p {
           continue;
         }
 
-        // 作品名は括弧内も含めてそのまま保持
+        // 作品名は括弧内も含めて保持
         const title = rawTitle.replace(/_/g, " ");
 
         if (!title) continue;
 
+        // 抽選対象外の団体を除外
+        if (excludedTitles.includes(title)) {
+          continue;
+        }
+
+        // 特別な移動先があれば優先
+        const url = specialUrls[title] ||
+          "https://ja.wikipedia.org/wiki/" +
+          encodeURIComponent(rawTitle.replace(/ /g, "_"));
+
         candidates.push({
           title,
           category: activeCategory,
-          url: "https://ja.wikipedia.org/wiki/" +
-            encodeURIComponent(rawTitle.replace(/ /g, "_"))
+          url
         });
 
         break;
@@ -188,6 +254,7 @@ p {
     ];
 
     console.log("抽選候補:", unique);
+    console.log("抽選候補数:", unique.length);
 
     if (!unique.length) {
       throw new Error(
