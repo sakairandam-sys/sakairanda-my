@@ -30,12 +30,14 @@ p {
 <p id="status">出演作品を抽選しています...</p>
 
 <script>
+
 (async () => {
   const status = document.getElementById("status");
   const api = "https://ja.wikipedia.org/w/api.php";
 
   try {
-    // Wikipedia APIから堺雅人のページを取得
+    status.textContent = "Wikipediaから出演作品を取得中...";
+
     const params = new URLSearchParams({
       action: "parse",
       page: "堺雅人",
@@ -47,13 +49,13 @@ p {
     const response = await fetch(api + "?" + params);
 
     if (!response.ok) {
-      throw new Error("Wikipedia APIとの通信に失敗しました");
+      throw new Error("Wikipedia API通信エラー");
     }
 
     const data = await response.json();
 
     if (data.error || !data.parse?.text?.["*"]) {
-      throw new Error("Wikipediaのデータを取得できません");
+      throw new Error("Wikipediaデータ取得エラー");
     }
 
     const doc = new DOMParser().parseFromString(
@@ -61,91 +63,149 @@ p {
       "text/html"
     );
 
-    // 出演に関する見出しを探す
-    const headings = [...doc.querySelectorAll("h2")];
+    // 抽選対象にする出演ジャンル
+    const targetCategories = [
+      "映画",
+      "テレビドラマ",
+      "舞台"
+    ];
 
-    const heading = headings.find(h =>
-      h.textContent.includes("出演")
-    );
-
-    if (!heading) {
-      throw new Error("出演欄が見つかりません");
-    }
-
-    // 見出しの次から作品リンクを取得
-    const section = heading.closest(".mw-heading") || heading;
     const candidates = [];
 
-    let node = section.nextElementSibling;
+    // Wikipediaの見出しを取得
+    const headings = [
+      ...doc.querySelectorAll(".mw-heading")
+    ];
 
-    while (node) {
+    // 「出演」の大見出しを探す
+    const mainHeading = headings.find(h => {
+      const h2 = h.querySelector("h2");
+      return h2 && h2.textContent.includes("出演");
+    });
 
-      // 次の大見出しで終了
-      if (
-        node.matches(".mw-heading") &&
-        node.querySelector("h2")
-      ) {
+    if (!mainHeading) {
+      throw new Error("出演見出しが見つかりません");
+    }
+
+    let insideAppearance = false;
+    let currentCategory = "";
+
+    for (const heading of headings) {
+
+      const h2 = heading.querySelector("h2");
+      const h3 = heading.querySelector("h3");
+
+      if (heading === mainHeading) {
+        insideAppearance = true;
+        continue;
+      }
+
+      // 次の大見出しに到達したら終了
+      if (insideAppearance && h2) {
         break;
       }
 
-      if (node.matches("ul, ol, table")) {
+      if (!insideAppearance) continue;
 
-        const items = node.matches("table")
-          ? [...node.querySelectorAll("tr")]
-          : [...node.querySelectorAll(":scope > li")];
+      // 映画・テレビドラマ・舞台の見出しを判定
+      if (h3) {
+        const category = h3.textContent
+          .replace(/\[編集\]/g, "")
+          .trim();
 
-        for (const item of items) {
+        currentCategory =
+          targetCategories.includes(category)
+            ? category
+            : "";
 
-          const links = [...item.querySelectorAll('a[href^="/wiki/"]')];
-
-          const a = links.find(link => {
-            const href = link.getAttribute("href");
-            const title = href.split("/wiki/")[1].split("#")[0];
-
-            return (
-              title &&
-              !title.includes(":") &&
-              link.textContent.trim()
-            );
-          });
-
-          if (a) {
-            const url = new URL(
-              a.getAttribute("href"),
-              "https://ja.wikipedia.org"
-            );
-
-            candidates.push(url.href);
-          }
-        }
+        continue;
       }
 
-      node = node.nextElementSibling;
+      if (!currentCategory) continue;
+
+      // 対象ジャンルの見出しから次の見出しまで取得
+      let node = heading.nextElementSibling;
+
+      while (node && !node.matches(".mw-heading")) {
+
+        if (node.matches("ul, ol, table")) {
+
+          const items = node.matches("table")
+            ? [...node.querySelectorAll("tr")]
+            : [...node.querySelectorAll(":scope > li")];
+
+          for (const item of items) {
+
+            const links = [
+              ...item.querySelectorAll('a[href^="/wiki/"]')
+            ];
+
+            const a = links.find(link => {
+              const href = link.getAttribute("href");
+              const title = href
+                .split("/wiki/")[1]
+                .split("#")[0];
+
+              return (
+                title &&
+                !title.includes(":") &&
+                link.textContent.trim() &&
+                !link.closest(".reference")
+              );
+            });
+
+            if (a) {
+              const url = new URL(
+                a.getAttribute("href"),
+                "https://ja.wikipedia.org"
+              );
+
+              candidates.push({
+                url: url.href,
+                title: a.textContent.trim(),
+                category: currentCategory
+              });
+            }
+          }
+        }
+
+        node = node.nextElementSibling;
+      }
     }
 
-    // 重複を削除
-    const unique = [...new Set(candidates)];
+    // URLの重複を削除
+    const unique = [
+      ...new Map(
+        candidates.map(item => [item.url, item])
+      ).values()
+    ];
 
-    if (unique.length === 0) {
-      throw new Error("出演作品が見つかりません");
+    if (!unique.length) {
+      throw new Error("対象作品が見つかりません");
     }
 
     // ランダム抽選
     const selected =
       unique[Math.floor(Math.random() * unique.length)];
 
-    // Wikipediaの作品ページへ移動
-    status.textContent = "抽選結果が決まりました！移動します...";
+    status.textContent =
+      selected.category + "：「" +
+      selected.title +
+      "」に決定！";
 
-    location.replace(selected);
+    // 少し表示してから作品ページへ移動
+    setTimeout(() => {
+      location.href = selected.url;
+    }, 800);
 
   } catch (error) {
     console.error("ガチャエラー:", error);
 
     status.textContent =
-      "抽選に失敗しました。時間をおいて再度アクセスしてください。";
+      "抽選に失敗しました。もう一度アクセスしてください。";
   }
 })();
+;
 </script>
 
 </body>
