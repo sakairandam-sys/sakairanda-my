@@ -50,7 +50,11 @@ p {
   const excludedTitles = [
     "劇団☆新感線",
     "双数姉妹",
-    "サードステージ"
+    "サードステージ",
+    "連続テレビ小説",
+    "土曜ワイド劇場",
+    "パナソニック",
+    "山田太一"
   ];
 
   // 括弧による除外処理の例外
@@ -59,13 +63,22 @@ p {
     "パンドラ〜永遠の命〜"
   ];
 
-  // 特定作品の移動先
+  // 特別なWikipedia移動先
   const specialUrls = {
     "エンジン":
       "https://ja.wikipedia.org/wiki/エンジン_(テレビドラマ)",
 
     "女医":
-      "https://ja.wikipedia.org/wiki/女医_(テレビドラマ)"
+      "https://ja.wikipedia.org/wiki/女医_(テレビドラマ)",
+
+    "パンドラ〜永遠の命〜":
+      "https://ja.wikipedia.org/wiki/パンドラ_(テレビドラマ)#パンドラ〜永遠の命〜",
+
+    "真田丸":
+      "https://ja.wikipedia.org/wiki/真田丸_(NHK大河ドラマ)",
+
+    "篤姫":
+      "https://ja.wikipedia.org/wiki/篤姫_(NHK大河ドラマ)"
   };
 
   try {
@@ -188,6 +201,7 @@ p {
       );
 
       // 括弧内にあるWikiリンクを除外
+      // 全角・半角括弧に対応
       cleanLine = cleanLine
         .replace(/（[^）]*）/g, "")
         .replace(/\([^)]*\)/g, "");
@@ -221,12 +235,12 @@ p {
           continue;
         }
 
-        // 作品名は括弧内も含めて保持
+        // 作品名を取得（括弧内も保持）
         const title = rawTitle.replace(/_/g, " ");
 
         if (!title) continue;
 
-        // 抽選対象外の団体を除外
+        // 抽選対象外を除外
         if (excludedTitles.includes(title)) {
           continue;
         }
