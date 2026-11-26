@@ -1,10 +1,11 @@
-
+```html
 <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>堺雅人 出演作ガチャ</title>
+
 <style>
 body {
   font-family: sans-serif;
@@ -12,10 +13,17 @@ body {
   padding: 60px 20px;
   background: #f5f5f5;
 }
-h1 { font-size: 24px; }
-p { color: #555; }
+
+h1 {
+  font-size: 24px;
+}
+
+p {
+  color: #555;
+}
 </style>
 </head>
+
 <body>
 
 <h1>堺雅人 出演作ガチャ</h1>
@@ -56,7 +64,12 @@ p { color: #555; }
     const targets = [
       "映画",
       "テレビドラマ",
-      "舞台"
+      "舞台",
+      "テレビアニメ",
+      "OVA",
+      "劇場アニメ",
+      "吹き替え",
+      "DVD"
     ];
 
     const candidates = [];
@@ -93,7 +106,7 @@ p { color: #555; }
 
         if (!insideAppearance) continue;
 
-        // 映画・ドラマ・舞台の見出し
+        // 抽選対象ジャンル
         if (targets.includes(name)) {
           activeCategory = name;
           activeLevel = level;
@@ -112,16 +125,36 @@ p { color: #555; }
         continue;
       }
 
-      // 作品リンクを取得
+      // 括弧内の最初の文字が数字以外なら
+      // 直前のWikiリンクも除外する
+      let cleanLine = line.replace(
+        /\[\[([^\]]+)\]\]\s*（([^）]*)）/g,
+        (match, link, content) => {
+          if (!/^[0-9０-９]/.test(content.trim())) {
+            return "";
+          }
+          return match;
+        }
+      );
+
+      // 括弧内にあるWikiリンクを除外
+      cleanLine = cleanLine
+        .replace(/（[^）]*）/g, "")
+        .replace(/\([^)]*\)/g, "");
+
+      // Wikiリンクを取得
       const matches = [
-        ...line.matchAll(/\[\[([^\]]+)\]\]/g)
+        ...cleanLine.matchAll(/\[\[([^\]]+)\]\]/g)
       ];
 
       if (!matches.length) continue;
 
       // 表の1行・リスト1行につき最初のリンクを採用
       for (const match of matches) {
-        const rawTitle = match[1].split("|")[0].split("#")[0].trim();
+        const rawTitle = match[1]
+          .split("|")[0]
+          .split("#")[0]
+          .trim();
 
         if (
           !rawTitle ||
@@ -131,14 +164,16 @@ p { color: #555; }
           continue;
         }
 
-        // ファイル名などを除外
+        // 作品名は括弧内も含めてそのまま保持
         const title = rawTitle.replace(/_/g, " ");
+
+        if (!title) continue;
 
         candidates.push({
           title,
           category: activeCategory,
           url: "https://ja.wikipedia.org/wiki/" +
-            encodeURIComponent(title.replace(/ /g, "_"))
+            encodeURIComponent(rawTitle.replace(/ /g, "_"))
         });
 
         break;
@@ -168,6 +203,7 @@ p { color: #555; }
       selected.category + "：「" +
       selected.title + "」に決定！";
 
+    // 1秒後にWikipediaへ移動
     setTimeout(() => {
       location.href = selected.url;
     }, 1000);
@@ -183,3 +219,4 @@ p { color: #555; }
 
 </body>
 </html>
+```
