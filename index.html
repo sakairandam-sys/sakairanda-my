@@ -71,28 +71,6 @@
       font-size: 14px;
     }
 
-    button {
-      width: 100%;
-      max-width: 280px;
-      padding: 16px 24px;
-      border: none;
-      border-radius: 999px;
-      background: #8b6f52;
-      color: white;
-      font-size: 17px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    button:hover {
-      opacity: 0.85;
-    }
-
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
     .note {
       margin-top: 25px;
       color: #999;
@@ -107,7 +85,7 @@
     <h1>堺雅人 出演作ガチャ</h1>
 
     <p class="description">
-      ボタンを押して、次に観る作品を決めよう！
+      次に観る作品を自動で抽選します。
     </p>
 
     <div id="result">
@@ -117,10 +95,6 @@
     <p id="message">
       Wikipediaから出演作品を取得しています。
     </p>
-
-    <button id="drawButton" disabled>
-      ガチャを回す
-    </button>
 
     <p class="note">
       ※ Wikipediaの出演作品情報をもとに抽選しています。
@@ -283,7 +257,7 @@
         .replace(/（[^）]*）/g, "")
         .replace(/\([^)]*\)/g, "");
 
-      // 例外作品も含め、残ったリンクだけを取得
+      // 残ったリンクだけを取得
       return links.filter(link =>
         cleanLine.includes(link.token)
       );
@@ -421,11 +395,8 @@
 
 
     // --------------------------------
-    // 抽選処理
+    // 自動抽選処理
     // --------------------------------
-
-    let works = [];
-    let isDrawing = false;
 
     const resultElement =
       document.getElementById("result");
@@ -433,18 +404,13 @@
     const messageElement =
       document.getElementById("message");
 
-    const drawButton =
-      document.getElementById("drawButton");
-
+    let works = [];
 
     function draw() {
 
-      if (isDrawing || works.length === 0) {
+      if (works.length === 0) {
         return;
       }
-
-      isDrawing = true;
-      drawButton.disabled = true;
 
       // 演出なしで即座に抽選
       const selected =
@@ -481,12 +447,13 @@
           );
         }
 
-        resultElement.textContent = "準備完了！";
+        resultElement.textContent = "抽選中…";
 
         messageElement.textContent =
-          works.length + "作品を取得しました。";
+          works.length + "作品から自動抽選します。";
 
-        drawButton.disabled = false;
+        // 作品取得後に自動抽選
+        draw();
 
       } catch (error) {
 
@@ -497,13 +464,8 @@
         messageElement.textContent =
           error.message ||
           "作品情報を取得できませんでした。";
-
-        drawButton.disabled = true;
       }
     }
-
-
-    drawButton.addEventListener("click", draw);
 
     initialize();
 
