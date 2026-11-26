@@ -1,0 +1,152 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>堺雅人 出演作ガチャ</title>
+
+<style>
+body {
+  font-family: sans-serif;
+  text-align: center;
+  padding: 60px 20px;
+  background: #f5f5f5;
+}
+
+h1 {
+  font-size: 24px;
+}
+
+p {
+  color: #555;
+}
+</style>
+</head>
+
+<body>
+
+<h1>堺雅人 出演作ガチャ</h1>
+<p id="status">出演作品を抽選しています...</p>
+
+<script>
+(async () => {
+  const status = document.getElementById("status");
+  const api = "https://ja.wikipedia.org/w/api.php";
+
+  try {
+    // Wikipedia APIから堺雅人のページを取得
+    const params = new URLSearchParams({
+      action: "parse",
+      page: "堺雅人",
+      prop: "text",
+      format: "json",
+      origin: "*"
+    });
+
+    const response = await fetch(api + "?" + params);
+
+    if (!response.ok) {
+      throw new Error("Wikipedia APIとの通信に失敗しました");
+    }
+
+    const data = await response.json();
+
+    if (data.error || !data.parse?.text?.["*"]) {
+      throw new Error("Wikipediaのデータを取得できません");
+    }
+
+    const doc = new DOMParser().parseFromString(
+      data.parse.text["*"],
+      "text/html"
+    );
+
+    // 出演に関する見出しを探す
+    const headings = [...doc.querySelectorAll("h2")];
+
+    const heading = headings.find(h =>
+      h.textContent.includes("出演")
+    );
+
+    if (!heading) {
+      throw new Error("出演欄が見つかりません");
+    }
+
+    // 見出しの次から作品リンクを取得
+    const section = heading.closest(".mw-heading") || heading;
+    const candidates = [];
+
+    let node = section.nextElementSibling;
+
+    while (node) {
+
+      // 次の大見出しで終了
+      if (
+        node.matches(".mw-heading") &&
+        node.querySelector("h2")
+      ) {
+        break;
+      }
+
+      if (node.matches("ul, ol, table")) {
+
+        const items = node.matches("table")
+          ? [...node.querySelectorAll("tr")]
+          : [...node.querySelectorAll(":scope > li")];
+
+        for (const item of items) {
+
+          const links = [...item.querySelectorAll('a[href^="/wiki/"]')];
+
+          const a = links.find(link => {
+            const href = link.getAttribute("href");
+            const title = href.split("/wiki/")[1].split("#")[0];
+
+            return (
+              title &&
+              !title.includes(":") &&
+              link.textContent.trim()
+            );
+          });
+
+          if (a) {
+            const url = new URL(
+              a.getAttribute("href"),
+              "https://ja.wikipedia.org"
+            );
+
+            candidates.push(url.href);
+          }
+        }
+      }
+
+      node = node.nextElementSibling;
+    }
+
+    // 重複を削除
+    const unique = [...new Set(candidates)];
+
+    if (unique.length === 0) {
+      throw new Error("出演作品が見つかりません");
+    }
+
+    // ランダム抽選
+    const selected =
+      unique[Math.floor(Math.random() * unique.length)];
+
+    // Wikipediaの作品ページへ移動
+    status.textContent = "抽選結果が決まりました！移動します...";
+
+    location.replace(selected);
+
+  } catch (error) {
+    console.error("ガチャエラー:", error);
+
+    status.textContent =
+      "抽選に失敗しました。時間をおいて再度アクセスしてください。";
+  }
+})();
+</script>
+
+</body>
+</html>
